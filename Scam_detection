@@ -10,9 +10,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 import nltk
 from nltk.corpus import stopwords
-import os
+import os # os is not directly used in the current version but is good to keep if you plan file operations
 
-nltk.download('stopwords')
+# Download stopwords if not already downloaded
+try:
+    nltk.data.find('corpora/stopwords')
+except nltk.downloader.DownloadError:
+    nltk.download('stopwords')
+
 stop_words = set(stopwords.words('english'))
 fake = Faker()
 
@@ -29,68 +34,97 @@ def generate_job(description_type='genuine'):
     else:
         scam_keywords = [
             "work from home", "urgent requirement", "no experience needed",
-            "limited positions", "click the link", "pay to apply", "easy money"
+            "limited positions", "click the link", "pay to apply", "easy money",
+            "crypto investment", "join telegram for details", "high returns", # Added a few more for better simulation
+            "part-time online job", "immediate start", "no experience, high pay"
         ]
         return {
             'title': f"{fake.job()} - {random.choice(['Immediate Hiring', 'Quick Cash', 'Apply Now'])}",
-            'description': f"{fake.bs().capitalize()}. {random.choice(scam_keywords)}.",
+            'description': f"{fake.bs().capitalize()}. {random.choice(scam_keywords)}. {fake.sentence()}", # Added a sentence for more variety
             'label': 1
         }
 
 # Text preprocessing
 def preprocess(text):
+    if not isinstance(text, str): # Handle potential non-string inputs (e.g., NaN from CSV)
+        return ""
     text = re.sub(r'\W+', ' ', text.lower())
-    return ' '.join([word for word in text.split() if word not in stop_words])
+    # Also filter out single character words after regex, as they are usually noise
+    return ' '.join([word for word in text.split() if word not in stop_words and len(word) > 1])
 
-# Load and prepare data
-def load_data():
-    data = [generate_job('genuine') for _ in range(500)] + [generate_job('scam') for _ in range(300)]
+# Load and prepare data (This function runs once when the Flask app starts)
+def load_and_train_initial_model():
+    # Increased data size for better training results
+    data = [generate_job('genuine') for _ in range(1000)] + [generate_job('scam') for _ in range(300)]
     df = pd.DataFrame(data)
-    df = df.sample(frac=1).reset_index(drop=True)
-    df['clean_text'] = (df['title'] + ' ' + df['description']).apply(preprocess)
-    return df
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True) # Added random_state for reproducibility
+    df['clean_text'] = (df['title'].fillna('') + ' ' + df['description'].fillna('')).apply(preprocess) # Handle NaNs
 
-# Train the model
-def train_model(df):
-    X_train, X_test, y_train, y_test = train_test_split(df['clean_text'], df['label'], test_size=0.2, stratify=df['label'])
-    vectorizer = TfidfVectorizer()
+    X_train, X_test, y_train, y_test = train_test_split(df['clean_text'], df['label'], test_size=0.2, random_state=42, stratify=df['label'])
+    
+    vectorizer = TfidfVectorizer(max_features=5000) # Limit the number of features for efficiency
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
-    model = LogisticRegression(class_weight='balanced')
+    
+    # Use 'liblinear' solver as it's good for smaller datasets and handles L1/L2 regularization
+    model = LogisticRegression(class_weight='balanced', solver='liblinear', random_state=42)
     model.fit(X_train_vec, y_train)
+    
     y_pred = model.predict(X_test_vec)
     f1 = f1_score(y_test, y_pred)
     return model, vectorizer, f1
 
+# Initialize model globally when the app starts
+# This ensures the model is trained only once and is available for all requests.
+model, vectorizer, f1_score_val = load_and_train_initial_model()
+
 # Predict uploaded CSV
 def predict_uploaded(df_upload, model, vectorizer):
-    df_upload['text'] = (df_upload['title'] + ' ' + df_upload['description']).apply(preprocess)
-    X_upload_vec = vectorizer.transform(df_upload['text'])
-    df_upload['fraud_prob'] = model.predict_proba(X_upload_vec)[:, 1]
-    df_upload['prediction'] = model.predict(X_upload_vec)
-    return df_upload
-
-# Initialize model
-base_data = load_data()
-model, vectorizer, f1_score_val = train_model(base_data)
+    df_upload_copy = df_upload.copy() # Work on a copy to avoid SettingWithCopyWarning
+    df_upload_copy['combined_text'] = (df_upload_copy['title'].fillna('') + ' ' + df_upload_copy['description'].fillna('')).apply(preprocess)
+    X_upload_vec = vectorizer.transform(df_upload_copy['combined_text'])
+    df_upload_copy['fraud_prob'] = model.predict_proba(X_upload_vec)[:, 1]
+    # Predict based on a 0.5 probability threshold
+    df_upload_copy['prediction'] = (df_upload_copy['fraud_prob'] >= 0.5).astype(int)
+    # Map 0/1 to 'Genuine'/'Scam' for display
+    df_upload_copy['prediction_label'] = df_upload_copy['prediction'].map({0: 'Genuine', 1: 'Scam'})
+    return df_upload_copy
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        file = request.files['file']
+        file = request.files.get('file') # Use .get() to safely access
         if file and file.filename.endswith('.csv'):
-            df = pd.read_csv(file)
-            if 'title' in df.columns and 'description' in df.columns:
-                df_result = predict_uploaded(df, model, vectorizer)
-                table_html = df_result[['title', 'fraud_prob', 'prediction']].to_html(classes='table table-striped', index=False)
-                pie_data = df_result['prediction'].value_counts(normalize=True).to_dict()
-                fraud_percent = pie_data.get(1, 0) * 100
-                genuine_percent = pie_data.get(0, 0) * 100
-                top_jobs = df_result.sort_values('fraud_prob', ascending=False)[['title', 'fraud_prob']].head(10).to_html(classes='table table-bordered', index=False)
-                return render_template('result.html', table_html=table_html, f1=f1_score_val, fraud_percent=fraud_percent, genuine_percent=genuine_percent, top_jobs=top_jobs)
-            else:
-                return render_template('index.html', error="CSV must have 'title' and 'description' columns.")
-    return render_template('index.html')
+            try:
+                # Read CSV directly from the file stream
+                df = pd.read_csv(file)
+                
+                if 'title' in df.columns and 'description' in df.columns:
+                    df_result = predict_uploaded(df, model, vectorizer)
+                    
+                    # Generate HTML table for all results
+                    table_html = df_result[['title', 'fraud_prob', 'prediction_label']].sort_values(by='fraud_prob', ascending=False).to_html(classes='table table-striped', index=False)
+                    
+                    # Prepare data for pie chart
+                    pie_data = df_result['prediction_label'].value_counts(normalize=True).to_dict()
+                    fraud_percent = pie_data.get('Scam', 0) * 100
+                    genuine_percent = pie_data.get('Genuine', 0) * 100
+                    
+                    # Generate HTML table for top 10 suspicious jobs
+                    top_jobs = df_result.sort_values('fraud_prob', ascending=False)[['title', 'fraud_prob', 'prediction_label']].head(10).to_html(classes='table table-bordered', index=False)
+                    
+                    return render_template('result.html', table_html=table_html, f1=f1_score_val,
+                                           fraud_percent=fraud_percent, genuine_percent=genuine_percent, top_jobs=top_jobs)
+                else:
+                    return render_template('index.html', error="CSV must have 'title' and 'description' columns.", f1_score_val=f1_score_val)
+            except Exception as e:
+                # Catch general errors during file processing (e.g., malformed CSV)
+                return render_template('index.html', error=f"Error processing file: {e}. Please ensure it's a valid CSV.", f1_score_val=f1_score_val)
+        else:
+            return render_template('index.html', error="Please upload a valid CSV file.", f1_score_val=f1_score_val)
+    # For GET request (initial page load)
+    return render_template('index.html', f1_score_val=f1_score_val)
 
 if __name__ == '__main__':
+    # When deploying to production, set debug=False and use a production WSGI server like Gunicorn.
     app.run(debug=True)
