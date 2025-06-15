@@ -1,0 +1,106 @@
+import pandas as pd
+import numpy as np
+import re
+import random
+from faker import Faker
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, f1_score
+import nltk
+from nltk.corpus import stopwords
+import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Download NLTK resources
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
+fake = Faker()
+
+# Function to simulate data
+def generate_job(description_type='genuine'):
+    if description_type == 'genuine':
+        return {
+            'title': fake.job(),
+            'description': f"We are looking for an experienced {fake.job()} with skills in {fake.bs()}",
+            'label': 0
+        }
+    else:
+        scam_keywords = [
+            "work from home", "urgent requirement", "no experience needed",
+            "limited positions", "click the link", "pay to apply", "easy money"
+        ]
+        return {
+            'title': f"{fake.job()} - {random.choice(['Immediate Hiring', 'Quick Cash', 'Apply Now'])}",
+            'description': f"{fake.bs().capitalize()}. {random.choice(scam_keywords)}.",
+            'label': 1
+        }
+
+# Text preprocessing
+def preprocess(text):
+    text = re.sub(r'\W+', ' ', text.lower())
+    return ' '.join([word for word in text.split() if word not in stop_words])
+
+# Load and prepare data
+def load_data():
+    data = [generate_job('genuine') for _ in range(500)] + [generate_job('scam') for _ in range(300)]
+    df = pd.DataFrame(data)
+    df = df.sample(frac=1).reset_index(drop=True)
+    df['clean_text'] = (df['title'] + ' ' + df['description']).apply(preprocess)
+    return df
+
+# Train the model
+def train_model(df):
+    X_train, X_test, y_train, y_test = train_test_split(df['clean_text'], df['label'], test_size=0.2, stratify=df['label'])
+    vectorizer = TfidfVectorizer()
+    X_train_vec = vectorizer.fit_transform(X_train)
+    X_test_vec = vectorizer.transform(X_test)
+    model = LogisticRegression(class_weight='balanced')
+    model.fit(X_train_vec, y_train)
+    y_pred = model.predict(X_test_vec)
+    f1 = f1_score(y_test, y_pred)
+    return model, vectorizer, f1
+
+# Predict uploaded CSV
+
+def predict_uploaded(df_upload, model, vectorizer):
+    df_upload['text'] = (df_upload['title'] + ' ' + df_upload['description']).apply(preprocess)
+    X_upload_vec = vectorizer.transform(df_upload['text'])
+    df_upload['fraud_prob'] = model.predict_proba(X_upload_vec)[:, 1]
+    df_upload['prediction'] = model.predict(X_upload_vec)
+    return df_upload
+
+# Streamlit app
+st.title("🕵️‍♂️ Spot the Scam - Job Scam Detector")
+df = load_data()
+model, vectorizer, f1 = train_model(df)
+
+st.markdown(f"**Model F1 Score:** {f1:.2f}")
+
+uploaded_file = st.file_uploader("Upload CSV with 'title' and 'description' columns", type='csv')
+if uploaded_file:
+    df_upload = pd.read_csv(uploaded_file)
+    if 'title' in df_upload.columns and 'description' in df_upload.columns:
+        df_results = predict_uploaded(df_upload, model, vectorizer)
+        st.success("✅ Predictions complete!")
+
+        # Display table
+        st.dataframe(df_results[['title', 'fraud_prob', 'prediction']])
+
+        # Histogram
+        st.subheader("📊 Fraud Probability Distribution")
+        fig, ax = plt.subplots()
+        sns.histplot(df_results['fraud_prob'], bins=20, ax=ax, kde=True)
+        st.pyplot(fig)
+
+        # Pie chart
+        st.subheader("🧾 Prediction Summary")
+        pie_data = df_results['prediction'].value_counts()
+        st.pyplot(pie_data.plot.pie(autopct='%1.1f%%', labels=['Genuine', 'Fraud'], figsize=(5, 5)).get_figure())
+
+        # Top suspicious listings
+        st.subheader("🚨 Top 10 Suspicious Listings")
+        st.table(df_results.sort_values('fraud_prob', ascending=False)[['title', 'fraud_prob']].head(10))
+    else:
+        st.error("❌ Uploaded CSV must contain 'title' and 'description' columns")
