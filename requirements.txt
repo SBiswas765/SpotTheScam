@@ -1,53 +1,32 @@
-Requirements for the Streamlit "Spot the Scam" Application
-This list specifies the Python libraries and their versions (or compatible versions) needed to run the Streamlit application.
+Requirements for SpotTheScam (Streamlit Version)
+To run the Streamlit-powered "Spot the Scam" application, you will need:
 
-Python Version:
+Python: Version 3.7 or higher.
+Essential Python Libraries:
+streamlit (for the web application framework)
+pandas (for data manipulation)
+numpy (for numerical operations)
+scikit-learn (for machine learning models: Logistic Regression, TF-IDF)
+nltk (for natural language processing: stopwords)
+faker (for simulating job data)
+matplotlib (for plotting visualizations)
+seaborn (for enhanced data visualizations)
+NLTK Data: The stopwords corpus (downloaded automatically by the script if not present).
+Operating System: Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
+Requirements for SpotTheScam (Flask Version)
+To run the Flask-based "Spot the Scam" application, you will need:
 
-Python 3.7+ (generally, recent versions are preferred, e.g., 3.9, 3.10, 3.11)
-Python Libraries (from requirements.txt equivalent):
-
-pandas
-numpy
-scikit-learn (or sklearn)
-nltk
-faker
-streamlit
-matplotlib
-seaborn
-re (part of standard Python library, no separate install needed)
-NLTK Data:
-
-stopwords corpus (NLTK will attempt to download this if not found).
-Operating System:
-
-Any OS that supports Python and the listed libraries (Windows, macOS, Linux).
-Hardware:
-
-Basic CPU and RAM sufficient for running Python scripts and a web browser. The resource usage will depend on the size of the uploaded CSV files and the simulated data.
-Requirements for the Flask "Spot the Scam" Application
-This list specifies the Python libraries and their versions (or compatible versions) needed to run the Flask application.
-
-Python Version:
-
-Python 3.7+ (generally, recent versions are preferred, e.g., 3.9, 3.10, 3.11)
-Python Libraries (from requirements.txt equivalent):
-
-flask
-pandas
-numpy
-scikit-learn (or sklearn)
-nltk
-faker
-re (part of standard Python library, no separate install needed)
-NLTK Data:
-
-stopwords corpus (NLTK will attempt to download this if not found).
-Operating System:
-
-Any OS that supports Python and the listed libraries (Windows, macOS, Linux).
-Hardware:
-
-Basic CPU and RAM sufficient for running Python scripts and a web server. Resource usage will depend on the size of uploaded CSVs and the number of concurrent users (though this simple Flask app is designed for single-user interaction).
-Additional Files:
-
-HTML Templates: Flask requires index.html and result.html files to render the web interface. These were implicitly mentioned in the Flask code's render_template calls. Without these files, the Flask application will not run correctly.
+Python: Version 3.7 or higher.
+Essential Python Libraries:
+flask (for the web application framework)
+pandas (for data manipulation)
+numpy (for numerical operations)
+scikit-learn (for machine learning models: Logistic Regression, TF-IDF)
+nltk (for natural language processing: stopwords)
+faker (for simulating job data)
+NLTK Data: The stopwords corpus (downloaded automatically by the script if not present).
+HTML Template Files:
+index.html (for the upload form/landing page)
+result.html (for displaying prediction results)
+These files must be located in a templates/ directory relative to app.py.
+Operating System: Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
