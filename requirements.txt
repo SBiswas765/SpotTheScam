@@ -1,33 +1,39 @@
-Requirements for SpotTheScam (Streamlit Version)
+Requirements
+For SpotTheScam (Streamlit Version)
 To run the Streamlit-powered "Spot the Scam" application, you will need:
 
-Python: Version 3.7 or higher.
+Python Environment:
+Python Version 3.7 or higher.
 Essential Python Libraries:
-streamlit (for the web application framework)
-pandas (for data manipulation)
-numpy (for numerical operations)
-scikit-learn (for machine learning models: Logistic Regression, TF-IDF)
-nltk (for natural language processing: stopwords)
-faker (for simulating job data)
-matplotlib (for plotting visualizations)
-seaborn (for enhanced data visualizations)
-NLTK Data: The stopwords corpus (downloaded automatically by the script if not present).
-Operating System: Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
-
-Requirements for SpotTheScam (Flask Version)
+streamlit (for the interactive web UI)
+pandas (for robust data manipulation)
+numpy (for numerical computing)
+scikit-learn (for machine learning functionalities: Logistic Regression, TF-IDF vectorization)
+nltk (for natural language processing, specifically stopwords)
+faker (to simulate realistic job data for model training)
+matplotlib (for creating static plots and charts)
+seaborn (for aesthetically pleasing statistical data visualizations)
+NLTK Data:
+The stopwords corpus (the application will attempt to download this automatically if not already present).
+Operating System:
+Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
+For SpotTheScam (Flask Version)
 To run the Flask-based "Spot the Scam" application, you will need:
 
-Python: Version 3.7 or higher.
+Python Environment:
+Python Version 3.7 or higher.
 Essential Python Libraries:
 flask (for the web application framework)
-pandas (for data manipulation)
-numpy (for numerical operations)
-scikit-learn (for machine learning models: Logistic Regression, TF-IDF)
-nltk (for natural language processing: stopwords)
-faker (for simulating job data)
-NLTK Data: The stopwords corpus (downloaded automatically by the script if not present).
+pandas (for robust data manipulation)
+numpy (for numerical computing)
+scikit-learn (for machine learning functionalities: Logistic Regression, TF-IDF vectorization)
+nltk (for natural language processing, specifically stopwords)
+faker (to simulate realistic job data for model training)
+NLTK Data:
+The stopwords corpus (the application will attempt to download this automatically if not already present).
 HTML Template Files:
-index.html (for the upload form/landing page)
-result.html (for displaying prediction results)
-These files must be located in a templates/ directory relative to app.py.
-Operating System: Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
+index.html (for the initial page with the CSV upload form)
+result.html (for displaying the prediction outcomes and analytics)
+These files must be placed within a templates/ directory located in the same root as your app.py.
+Operating System:
+Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
