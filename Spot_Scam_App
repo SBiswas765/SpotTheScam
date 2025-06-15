@@ -6,101 +6,162 @@ from faker import Faker
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, f1_score
+from sklearn.metrics import f1_score # classification_report is useful but not explicitly displayed in your app
 import nltk
 from nltk.corpus import stopwords
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Download NLTK resources
-nltk.download('stopwords')
+# Ensure NLTK stopwords are downloaded
+try:
+    nltk.data.find('corpora/stopwords')
+except nltk.downloader.DownloadError:
+    nltk.download('stopwords')
+
 stop_words = set(stopwords.words('english'))
 fake = Faker()
 
-# Function to simulate data
-def generate_job(description_type='genuine'):
-    if description_type == 'genuine':
-        return {
-            'title': fake.job(),
-            'description': f"We are looking for an experienced {fake.job()} with skills in {fake.bs()}",
-            'label': 0
-        }
-    else:
-        scam_keywords = [
-            "work from home", "urgent requirement", "no experience needed",
-            "limited positions", "click the link", "pay to apply", "easy money"
-        ]
-        return {
-            'title': f"{fake.job()} - {random.choice(['Immediate Hiring', 'Quick Cash', 'Apply Now'])}",
-            'description': f"{fake.bs().capitalize()}. {random.choice(scam_keywords)}.",
-            'label': 1
-        }
+# Function to simulate data (cached)
+@st.cache_data
+def generate_job_data(num_genuine=1000, num_scam=200): # Increased counts for better training
+    data = []
 
-# Text preprocessing
-def preprocess(text):
-    text = re.sub(r'\W+', ' ', text.lower())
-    return ' '.join([word for word in text.split() if word not in stop_words])
+    # Generate Genuine Jobs
+    for _ in range(num_genuine):
+        title = fake.job()
+        description = fake.paragraph(nb_sentences=5) + " " + fake.company() + " is looking for a talented " + \
+                      fake.job() + ". Responsibilities include " + fake.sentence() + \
+                      ". Requires " + fake.word() + " experience."
+        data.append([title, description, 0]) # 0 for genuine
 
-# Load and prepare data
-def load_data():
-    data = [generate_job('genuine') for _ in range(500)] + [generate_job('scam') for _ in range(300)]
-    df = pd.DataFrame(data)
-    df = df.sample(frac=1).reset_index(drop=True)
-    df['clean_text'] = (df['title'] + ' ' + df['description']).apply(preprocess)
+    # Generate Scam Jobs
+    scam_keywords = ["easy money", "no experience needed", "work from home", "high salary",
+                     "urgent hiring", "guaranteed income", "remote work", "investment required",
+                     "data entry", "part-time", "quick cash", "unlimited earning", "fast money",
+                     "join telegram", "crypto", "blockchain", "get rich quick", "pyramid scheme"] # Added more
+    scam_titles = ["Remote Data Entry", "Work From Home Specialist", "Online Tasker",
+                   "Investment Opportunity", "Digital Marketing Assistant (No Exp)",
+                   "Part-Time Online Promoter", "Crypto Analyst", "Blockchain Developer",
+                   "Financial Advisor - No Experience"]
+
+    for _ in range(num_scam):
+        title = np.random.choice(scam_titles) if np.random.rand() < 0.7 else fake.job()
+        description = fake.paragraph(nb_sentences=3) + " " + np.random.choice(scam_keywords) + \
+                      ". " + fake.sentence() + " " + np.random.choice(scam_keywords) + \
+                      ". Serious inquiries only. Apply now for " + np.random.choice(scam_keywords) + "."
+        data.append([title, description, 1]) # 1 for scam
+
+    df = pd.DataFrame(data, columns=['title', 'description', 'label'])
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True) # Ensure reproducibility and shuffle
     return df
 
-# Train the model
-def train_model(df):
-    X_train, X_test, y_train, y_test = train_test_split(df['clean_text'], df['label'], test_size=0.2, stratify=df['label'])
-    vectorizer = TfidfVectorizer()
+# Text preprocessing
+def preprocess_text(text):
+    if not isinstance(text, str): # Handle non-string inputs (e.g., NaN)
+        return ""
+    text = re.sub(r'\W+', ' ', text.lower()) # Remove non-alphanumeric, convert to lower
+    return ' '.join([word for word in text.split() if word not in stop_words and len(word) > 1]) # Remove single chars
+
+# Train the model (cached)
+@st.cache_resource # Use cache_resource for models, as they are not just data
+def train_ml_model(df_train):
+    df_train['clean_text'] = (df_train['title'].fillna('') + ' ' + df_train['description'].fillna('')).apply(preprocess_text)
+
+    X_train, X_test, y_train, y_test = train_test_split(df_train['clean_text'], df_train['label'], test_size=0.2, stratify=df_train['label'], random_state=42)
+
+    vectorizer = TfidfVectorizer(max_features=5000) # Limit vocabulary size
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
-    model = LogisticRegression(class_weight='balanced')
+
+    model = LogisticRegression(class_weight='balanced', solver='liblinear', random_state=42) # Specify solver and random_state
     model.fit(X_train_vec, y_train)
+
     y_pred = model.predict(X_test_vec)
     f1 = f1_score(y_test, y_pred)
     return model, vectorizer, f1
 
 # Predict uploaded CSV
+def predict_on_uploaded_data(df_upload, model, vectorizer):
+    df_upload_copy = df_upload.copy() # Work on a copy to avoid SettingWithCopyWarning
+    df_upload_copy['combined_text'] = (df_upload_copy['title'].fillna('') + ' ' + df_upload_copy['description'].fillna('')).apply(preprocess_text)
+    X_upload_vec = vectorizer.transform(df_upload_copy['combined_text'])
+    df_upload_copy['fraud_prob'] = model.predict_proba(X_upload_vec)[:, 1]
+    df_upload_copy['prediction'] = np.where(df_upload_copy['fraud_prob'] >= 0.5, 1, 0) # Use 0.5 threshold for clarity
 
-def predict_uploaded(df_upload, model, vectorizer):
-    df_upload['text'] = (df_upload['title'] + ' ' + df_upload['description']).apply(preprocess)
-    X_upload_vec = vectorizer.transform(df_upload['text'])
-    df_upload['fraud_prob'] = model.predict_proba(X_upload_vec)[:, 1]
-    df_upload['prediction'] = model.predict(X_upload_vec)
-    return df_upload
+    # Map 0/1 predictions to labels for better readability
+    df_upload_copy['prediction_label'] = df_upload_copy['prediction'].map({0: 'Genuine', 1: 'Scam'})
+    return df_upload_copy
 
-# Streamlit app
+# --- Streamlit App ---
+st.set_page_config(layout="wide", page_title="Spot the Scam", page_icon="🕵️‍♂️")
+
 st.title("🕵️‍♂️ Spot the Scam - Job Scam Detector")
-df = load_data()
-model, vectorizer, f1 = train_model(df)
 
-st.markdown(f"**Model F1 Score:** {f1:.2f}")
+st.markdown("""
+    This application helps you identify potentially fraudulent job postings using a machine learning model.
+    The model is trained on a simulated dataset of genuine and scam job descriptions.
+""")
 
-uploaded_file = st.file_uploader("Upload CSV with 'title' and 'description' columns", type='csv')
+# Load and train model when app starts (and cache it)
+with st.spinner("🚀 Training AI Model on Simulated Data..."):
+    df_simulated = generate_job_data()
+    model, vectorizer, f1_score_val = train_ml_model(df_simulated)
+st.success("✅ Model Trained!")
+st.info(f"**Model F1 Score on simulated data:** `{f1_score_val:.4f}`")
+
+st.markdown("---")
+st.subheader("📁 Upload Your Job Listings (CSV)")
+st.markdown("Upload a CSV file containing `title` and `description` columns to get predictions.")
+
+uploaded_file = st.file_uploader("Choose a CSV file", type='csv')
+
 if uploaded_file:
-    df_upload = pd.read_csv(uploaded_file)
-    if 'title' in df_upload.columns and 'description' in df_upload.columns:
-        df_results = predict_uploaded(df_upload, model, vectorizer)
-        st.success("✅ Predictions complete!")
+    try:
+        df_upload = pd.read_csv(uploaded_file)
 
-        # Display table
-        st.dataframe(df_results[['title', 'fraud_prob', 'prediction']])
+        if 'title' in df_upload.columns and 'description' in df_upload.columns:
+            st.write("Processing uploaded file...")
+            df_results = predict_on_uploaded_data(df_upload, model, vectorizer)
+            st.success("✅ Predictions complete!")
 
-        # Histogram
-        st.subheader("📊 Fraud Probability Distribution")
-        fig, ax = plt.subplots()
-        sns.histplot(df_results['fraud_prob'], bins=20, ax=ax, kde=True)
-        st.pyplot(fig)
+            st.subheader("Predicted Job Listings:")
+            st.dataframe(df_results[['title', 'description', 'fraud_prob', 'prediction_label']].sort_values(by='fraud_prob', ascending=False))
 
-        # Pie chart
-        st.subheader("🧾 Prediction Summary")
-        pie_data = df_results['prediction'].value_counts()
-        st.pyplot(pie_data.plot.pie(autopct='%1.1f%%', labels=['Genuine', 'Fraud'], figsize=(5, 5)).get_figure())
+            # Visualizations
+            col1, col2 = st.columns([1, 1])
 
-        # Top suspicious listings
-        st.subheader("🚨 Top 10 Suspicious Listings")
-        st.table(df_results.sort_values('fraud_prob', ascending=False)[['title', 'fraud_prob']].head(10))
-    else:
-        st.error("❌ Uploaded CSV must contain 'title' and 'description' columns")
+            with col1:
+                st.subheader("📊 Fraud Probability Distribution")
+                fig_hist, ax_hist = plt.subplots(figsize=(8, 5))
+                sns.histplot(df_results['fraud_prob'], bins=20, ax=ax_hist, kde=True, color='skyblue')
+                ax_hist.set_xlabel('Fraud Probability')
+                ax_hist.set_ylabel('Number of Listings')
+                ax_hist.set_title('Distribution of Predicted Fraud Probabilities')
+                st.pyplot(fig_hist)
+
+            with col2:
+                st.subheader("🧾 Prediction Summary")
+                prediction_counts = df_results['prediction_label'].value_counts()
+                fig_pie, ax_pie = plt.subplots(figsize=(6, 6))
+                colors = ['#66b3ff', '#ff9999'] # Blue for Genuine, Red for Scam
+                # Ensure 'Genuine' and 'Scam' are always in the same order for consistent colors
+                ordered_labels = ['Genuine', 'Scam']
+                sizes = [prediction_counts.get('Genuine', 0), prediction_counts.get('Scam', 0)]
+                
+                ax_pie.pie(sizes, labels=ordered_labels, autopct='%1.1f%%', startangle=90, colors=colors, wedgeprops={'edgecolor': 'black'})
+                ax_pie.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
+                ax_pie.set_title('Overall Prediction Outcome')
+                st.pyplot(fig_pie)
+
+            st.subheader("🚨 Top 10 Most Suspicious Listings:")
+            st.dataframe(df_results.sort_values('fraud_prob', ascending=False)[['title', 'description', 'fraud_prob', 'prediction_label']].head(10))
+
+        else:
+            st.error("❌ Uploaded CSV must contain 'title' and 'description' columns.")
+            st.info("Example CSV format:\n```csv\ntitle,description\n\"Software Engineer\",\"Join our remote team. Easy money. No experience needed.\"\n\"Data Analyst\",\"We are looking for an experienced analyst with SQL skills.\"\n```")
+    except Exception as e:
+        st.error(f"An error occurred while processing the file: {e}")
+        st.info("Please ensure your CSV file is correctly formatted and accessible.")
+else:
+    st.info("Please upload a CSV file to get started with predictions.")
