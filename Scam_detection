@@ -1,0 +1,96 @@
+from flask import Flask, request, render_template, redirect, url_for
+import pandas as pd
+import numpy as np
+import re
+import random
+from faker import Faker
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score
+import nltk
+from nltk.corpus import stopwords
+import os
+
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
+fake = Faker()
+
+app = Flask(__name__)
+
+# Function to simulate data
+def generate_job(description_type='genuine'):
+    if description_type == 'genuine':
+        return {
+            'title': fake.job(),
+            'description': f"We are looking for an experienced {fake.job()} with skills in {fake.bs()}",
+            'label': 0
+        }
+    else:
+        scam_keywords = [
+            "work from home", "urgent requirement", "no experience needed",
+            "limited positions", "click the link", "pay to apply", "easy money"
+        ]
+        return {
+            'title': f"{fake.job()} - {random.choice(['Immediate Hiring', 'Quick Cash', 'Apply Now'])}",
+            'description': f"{fake.bs().capitalize()}. {random.choice(scam_keywords)}.",
+            'label': 1
+        }
+
+# Text preprocessing
+def preprocess(text):
+    text = re.sub(r'\W+', ' ', text.lower())
+    return ' '.join([word for word in text.split() if word not in stop_words])
+
+# Load and prepare data
+def load_data():
+    data = [generate_job('genuine') for _ in range(500)] + [generate_job('scam') for _ in range(300)]
+    df = pd.DataFrame(data)
+    df = df.sample(frac=1).reset_index(drop=True)
+    df['clean_text'] = (df['title'] + ' ' + df['description']).apply(preprocess)
+    return df
+
+# Train the model
+def train_model(df):
+    X_train, X_test, y_train, y_test = train_test_split(df['clean_text'], df['label'], test_size=0.2, stratify=df['label'])
+    vectorizer = TfidfVectorizer()
+    X_train_vec = vectorizer.fit_transform(X_train)
+    X_test_vec = vectorizer.transform(X_test)
+    model = LogisticRegression(class_weight='balanced')
+    model.fit(X_train_vec, y_train)
+    y_pred = model.predict(X_test_vec)
+    f1 = f1_score(y_test, y_pred)
+    return model, vectorizer, f1
+
+# Predict uploaded CSV
+def predict_uploaded(df_upload, model, vectorizer):
+    df_upload['text'] = (df_upload['title'] + ' ' + df_upload['description']).apply(preprocess)
+    X_upload_vec = vectorizer.transform(df_upload['text'])
+    df_upload['fraud_prob'] = model.predict_proba(X_upload_vec)[:, 1]
+    df_upload['prediction'] = model.predict(X_upload_vec)
+    return df_upload
+
+# Initialize model
+base_data = load_data()
+model, vectorizer, f1_score_val = train_model(base_data)
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        file = request.files['file']
+        if file and file.filename.endswith('.csv'):
+            df = pd.read_csv(file)
+            if 'title' in df.columns and 'description' in df.columns:
+                df_result = predict_uploaded(df, model, vectorizer)
+                table_html = df_result[['title', 'fraud_prob', 'prediction']].to_html(classes='table table-striped', index=False)
+                pie_data = df_result['prediction'].value_counts(normalize=True).to_dict()
+                fraud_percent = pie_data.get(1, 0) * 100
+                genuine_percent = pie_data.get(0, 0) * 100
+                top_jobs = df_result.sort_values('fraud_prob', ascending=False)[['title', 'fraud_prob']].head(10).to_html(classes='table table-bordered', index=False)
+                return render_template('result.html', table_html=table_html, f1=f1_score_val, fraud_percent=fraud_percent, genuine_percent=genuine_percent, top_jobs=top_jobs)
+            else:
+                return render_template('index.html', error="CSV must have 'title' and 'description' columns.")
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)
