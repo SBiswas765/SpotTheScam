@@ -13,6 +13,7 @@ matplotlib (for plotting visualizations)
 seaborn (for enhanced data visualizations)
 NLTK Data: The stopwords corpus (downloaded automatically by the script if not present).
 Operating System: Any modern operating system compatible with Python (e.g., Windows, macOS, Linux).
+
 Requirements for SpotTheScam (Flask Version)
 To run the Flask-based "Spot the Scam" application, you will need:
 
