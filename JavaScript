@@ -1,0 +1,17 @@
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadButton = document.querySelector('.btn-primary');
+    if (uploadButton) {
+        uploadButton.addEventListener('mouseover', function() {
+            uploadButton.style.transform = 'scale(1.02)';
+            uploadButton.style.transition = 'transform 0.2s ease-in-out';
+        });
+        uploadButton.addEventListener('mouseout', function() {
+            uploadButton.style.transform = 'scale(1)';
+        });
+    }
+
+ 
+
+    console.log("Custom script loaded!");
+});
+
