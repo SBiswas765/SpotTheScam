@@ -1,8 +1,53 @@
+Requirements for the Streamlit "Spot the Scam" Application
+This list specifies the Python libraries and their versions (or compatible versions) needed to run the Streamlit application.
+
+Python Version:
+
+Python 3.7+ (generally, recent versions are preferred, e.g., 3.9, 3.10, 3.11)
+Python Libraries (from requirements.txt equivalent):
+
 pandas
 numpy
-scikit-learn
+scikit-learn (or sklearn)
 nltk
 faker
 streamlit
 matplotlib
 seaborn
+re (part of standard Python library, no separate install needed)
+NLTK Data:
+
+stopwords corpus (NLTK will attempt to download this if not found).
+Operating System:
+
+Any OS that supports Python and the listed libraries (Windows, macOS, Linux).
+Hardware:
+
+Basic CPU and RAM sufficient for running Python scripts and a web browser. The resource usage will depend on the size of the uploaded CSV files and the simulated data.
+Requirements for the Flask "Spot the Scam" Application
+This list specifies the Python libraries and their versions (or compatible versions) needed to run the Flask application.
+
+Python Version:
+
+Python 3.7+ (generally, recent versions are preferred, e.g., 3.9, 3.10, 3.11)
+Python Libraries (from requirements.txt equivalent):
+
+flask
+pandas
+numpy
+scikit-learn (or sklearn)
+nltk
+faker
+re (part of standard Python library, no separate install needed)
+NLTK Data:
+
+stopwords corpus (NLTK will attempt to download this if not found).
+Operating System:
+
+Any OS that supports Python and the listed libraries (Windows, macOS, Linux).
+Hardware:
+
+Basic CPU and RAM sufficient for running Python scripts and a web server. Resource usage will depend on the size of uploaded CSVs and the number of concurrent users (though this simple Flask app is designed for single-user interaction).
+Additional Files:
+
+HTML Templates: Flask requires index.html and result.html files to render the web interface. These were implicitly mentioned in the Flask code's render_template calls. Without these files, the Flask application will not run correctly.
